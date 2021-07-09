@@ -1,20 +1,30 @@
 package io.agora.agora_rtc_engine
 
+import android.app.Activity
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
+import android.util.DisplayMetrics
+import android.util.Log
+import android.view.WindowManager
 import androidx.annotation.NonNull
+import io.agora.rtc.Constants
+import io.agora.rtc.IRtcEngineEventHandler
 import io.agora.rtc.RtcEngine
 import io.agora.rtc.base.RtcEngineManager
+import io.agora.rtc.base.screenshare.capture.*
+import io.agora.rtc.video.AgoraVideoFrame
 import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.plugin.common.*
 import io.flutter.plugin.common.MethodChannel.MethodCallHandler
 import io.flutter.plugin.common.MethodChannel.Result
 import io.flutter.plugin.common.PluginRegistry.Registrar
 import io.flutter.plugin.platform.PlatformViewRegistry
+import java.util.*
+
 
 /** AgoraRtcEnginePlugin */
-class AgoraRtcEnginePlugin : FlutterPlugin, MethodCallHandler, EventChannel.StreamHandler {
+class AgoraRtcEnginePlugin : FlutterPlugin, MethodCallHandler, EventChannel.StreamHandler  {
   private var registrar: Registrar? = null
   private var binding: FlutterPlugin.FlutterPluginBinding? = null
   private lateinit var applicationContext: Context
@@ -30,6 +40,10 @@ class AgoraRtcEnginePlugin : FlutterPlugin, MethodCallHandler, EventChannel.Stre
   private val manager = RtcEngineManager { methodName, data -> emit(methodName, data) }
   private val handler = Handler(Looper.getMainLooper())
   private val rtcChannelPlugin = AgoraRtcChannelPlugin(this)
+
+  //Activity and Context
+//  private lateinit var context: Context
+  private lateinit var activity: Activity
 
   // This static function is optional and equivalent to onAttachedToEngine. It supports the old
   // pre-Flutter-1.12 Android projects. You are encouraged to continue supporting
@@ -74,6 +88,9 @@ class AgoraRtcEnginePlugin : FlutterPlugin, MethodCallHandler, EventChannel.Stre
 
   override fun onAttachedToEngine(@NonNull binding: FlutterPlugin.FlutterPluginBinding) {
     this.binding = binding
+//    context = flutterPluginBinding.applicationContext
+     activity = binding.applicationContext as Activity
+
     rtcChannelPlugin.onAttachedToEngine(binding)
     initPlugin(binding.applicationContext, binding.binaryMessenger, binding.platformViewRegistry)
   }
@@ -128,6 +145,137 @@ class AgoraRtcEnginePlugin : FlutterPlugin, MethodCallHandler, EventChannel.Stre
     if (call.method == "getAssetAbsolutePath") {
       getAssetAbsolutePath(call, result)
       return
+    }
+    if (call.method == "screenShare") {
+      val metrics = DisplayMetrics()
+      activity.getWindowManager().getDefaultDisplay().getMetrics(metrics)
+      var mScreenCapture: ScreenCapture? = null
+      var mScreenGLRender: GLRender? = null
+      var mRtcEngine: RtcEngine? = null
+
+
+      if (mScreenGLRender == null) {
+        mScreenGLRender = GLRender()
+      }
+      if (mScreenCapture == null) {
+        mScreenCapture = ScreenCapture(applicationContext.getApplicationContext(), mScreenGLRender, metrics.densityDpi)
+      }
+
+      mScreenCapture.mImgTexSrcConnector.connect(object : SinkConnector<ImgTexFrame?>() {
+        override fun onFormatChanged(obj: Any) {
+          Log.d(
+           "ScreenShare",
+            "onFormatChanged " + obj.toString()
+          )
+        }
+
+        override fun onFrameAvailable(frame: ImgTexFrame?) {
+          Log.d(
+            "ScreenShare",
+            "onFrameAvailable " + frame.toString()
+          )
+          if (mRtcEngine == null) {
+            return
+          }
+          val vf: AgoraVideoFrame = AgoraVideoFrame()
+          vf.format = AgoraVideoFrame.FORMAT_TEXTURE_OES
+          vf.timeStamp = frame!!.pts
+          vf.stride = frame!!.mFormat.mWidth
+          vf.height = frame!!.mFormat.mHeight
+          vf.textureID = frame!!.mTextureId
+          vf.syncMode = true
+          vf.eglContext14 = mScreenGLRender.getEGLContext()
+          vf.transform = frame!!.mTexMatrix
+          mRtcEngine?.pushExternalVideoFrame(vf)
+        }
+
+
+
+      })
+
+//
+//      mScreenCapture.setOnScreenCaptureListener(object : ScreenCapture.OnScreenCaptureListener() {
+//        override fun onStarted(){
+//          Log.d(
+//            "ScreenShare",
+//            "Screen Record Started"
+//          )
+//        }
+//      override fun onError(err:Int){
+//          Log.d(
+//            "ScreenShare",
+//            "onError $err"
+//          )
+//          when (err) {
+//            ScreenCapture.SCREEN_ERROR_SYSTEM_UNSUPPORTED -> {
+//              Log.d(
+//                "ScreenShare",
+//                "Device Doesnt support Screen Share"
+//              )
+//            }
+//            ScreenCapture.SCREEN_ERROR_PERMISSION_DENIED -> {
+//              Log.d(
+//                "ScreenShare",
+//                "Permission Denied"
+//              )
+//
+//
+//            }
+//          }
+//        }
+//      })
+
+      val wm: WindowManager = applicationContext.getSystemService(Context.WINDOW_SERVICE) as WindowManager
+      val screenWidth: Int = wm.getDefaultDisplay().getWidth()
+      val screenHeight: Int = wm.getDefaultDisplay().getHeight()
+      mScreenGLRender.init(screenWidth, screenHeight)
+
+      mRtcEngine = RtcEngine.create(
+       applicationContext,
+
+        "",//TODO: Pass AppID
+        object : IRtcEngineEventHandler() {
+          override fun onJoinChannelSuccess(channel: String, uid: Int, elapsed: Int) {
+            Log.d(
+             "ScreenShare",
+              "onJoinChannelSuccess $channel $elapsed"
+            )
+          }
+
+          override fun onWarning(warn: Int) {
+            Log.d(
+             "ScreenShare",
+              "onWarning $warn"
+            )
+          }
+
+          override fun onError(err: Int) {
+            Log.d(
+        "ScreenShare",
+              "onError $err"
+            )
+          }
+
+          override fun onAudioRouteChanged(routing: Int) {
+            Log.d(
+              "ScreenShare",
+              "onAudioRouteChanged $routing"
+            )
+          }
+        })
+
+      mRtcEngine.setChannelProfile(Constants.CHANNEL_PROFILE_LIVE_BROADCASTING)
+      mRtcEngine.enableVideo()
+      if (mRtcEngine.isTextureEncodeSupported) {
+        mRtcEngine.setExternalVideoSource(true, true, true)
+      } else {
+        throw RuntimeException("Can not work on device do not supporting texture" + mRtcEngine.isTextureEncodeSupported())
+      }
+      mRtcEngine.setVideoProfile(Constants.VIDEO_PROFILE_360P, true)
+
+      mRtcEngine.setClientRole(Constants.CLIENT_ROLE_BROADCASTER, null)
+
+
     }
     manager.javaClass.declaredMethods.find { it.name == call.method }?.let { function ->
       function.let { method ->

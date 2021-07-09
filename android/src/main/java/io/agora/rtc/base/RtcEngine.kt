@@ -1,9 +1,14 @@
 package io.agora.rtc.base
 
+
 import android.content.Context
 import io.agora.rtc.*
+import io.agora.rtc.base.screenshare.*
+import io.agora.rtc.base.screenshare.capture.*
 import io.agora.rtc.internal.EncryptionConfig
 import io.agora.rtc.models.UserInfo
+
+
 
 class IRtcEngine {
   interface RtcEngineInterface : RtcUserInfoInterface, RtcAudioInterface, RtcVideoInterface,
@@ -12,7 +17,7 @@ class IRtcEngine {
     RtcAudioRouteInterface, RtcEarMonitoringInterface, RtcDualStreamInterface,
     RtcFallbackInterface, RtcTestInterface, RtcMediaMetadataInterface,
     RtcWatermarkInterface, RtcEncryptionInterface, RtcAudioRecorderInterface,
-    RtcInjectStreamInterface, RtcCameraInterface, RtcStreamMessageInterface {
+    RtcInjectStreamInterface, RtcCameraInterface,RtcScreenShareInterface, RtcStreamMessageInterface {
     fun create(params: Map<String, *>, callback: Callback)
 
     fun destroy(callback: Callback)
@@ -326,6 +331,11 @@ class IRtcEngine {
     fun removeInjectStreamUrl(params: Map<String, *>, callback: Callback)
   }
 
+  interface RtcScreenShareInterface{
+    fun shareScreen(params: Map<String, *>,callback: Callback)
+  }
+
+
   interface RtcCameraInterface {
     fun switchCamera(callback: Callback)
 
@@ -362,6 +372,7 @@ class IRtcEngine {
     fun sendStreamMessage(params: Map<String, *>, callback: Callback)
   }
 }
+
 
 class RtcEngineManager(
   private val emit: (methodName: String, data: Map<String, Any?>?) -> Unit
@@ -1185,6 +1196,15 @@ class RtcEngineManager(
     callback.code(engine?.switchCamera())
   }
 
+  override fun shareScreen(params: Map<String, *>,callback: Callback){
+    //TODO : Implement screen share
+    val mScreenCapture: ScreenCapture? = null
+    val mScreenGLRender: GLRender? = null
+
+
+  }
+
+
   override fun isCameraZoomSupported(callback: Callback) {
     callback.resolve(engine) { it.isCameraZoomSupported }
   }
@@ -1268,4 +1288,15 @@ class RtcEngineManager(
       )
     )
   }
+
+
+//  private class VideoInputServiceConnection : ServiceConnection {
+//    fun onServiceConnected(componentName: ComponentName?, iBinder: IBinder) {
+//      mService = iBinder as IExternalVideoInputService
+//    }
+//
+//    fun onServiceDisconnected(componentName: ComponentName?) {
+//      mService = null
+//    }
+//  }
 }

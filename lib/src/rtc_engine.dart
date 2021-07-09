@@ -915,6 +915,7 @@ class RtcEngine with RtcEngineInterface {
         'params': jsonEncode({}),
       });
     }
+
     return _invokeMethod('enableVideo');
   }
 
@@ -2208,6 +2209,11 @@ class RtcEngine with RtcEngineInterface {
       });
     }
     return _invokeMethod('switchCamera');
+  }
+
+  @override
+  Future<void> shareScreen(var context) {
+    return _invokeMethod('shareScreen',{'Context':context});
   }
 
   @override
